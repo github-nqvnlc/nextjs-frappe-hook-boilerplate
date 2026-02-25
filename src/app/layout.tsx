@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Task View",
-  description: "Kanban Task Management",
+  title: "Next.js + Frappe Boilerplate",
+  description: "Boilerplate Next.js + Frappe",
 };
 
 export default function RootLayout({

@@ -11,6 +11,7 @@ import { useDeleteDoc } from '@/hooks/useDeleteDoc';
 import { useGetCall } from '@/hooks/useGetCall';
 import { usePostCall, usePutCall, useDeleteCall } from '@/hooks/useMutationCall';
 import { useFileUpload } from '@/hooks/useFileUpload';
+import { useDocSearch } from '@/hooks/useDocSearch';
 import type { Filter } from '@/types/hooks';
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -267,7 +268,7 @@ function JsonTextarea({ label, value, onChange, rows = 4 }: {
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
-type HookId = 'getDoc' | 'getList' | 'getCount' | 'createDoc' | 'updateDoc' | 'deleteDoc' | 'getCall' | 'postCall' | 'fileUpload';
+type HookId = 'getDoc' | 'getList' | 'getCount' | 'createDoc' | 'updateDoc' | 'deleteDoc' | 'getCall' | 'postCall' | 'fileUpload' | 'docSearch';
 
 export default function DocHookDevPage() {
   const [active, setActive] = useState<HookId | null>(null);
@@ -333,6 +334,16 @@ export default function DocHookDevPage() {
   const [fuDocname, setFuDocname] = useState('');
   const [fuFieldname, setFuFieldname] = useState('');
   const fileUpload = useFileUpload();
+
+  // ── useDocSearch ── (live / reactive — no submit needed)
+  const [dsResource, setDsResource] = useState('');
+  const [dsSearch, setDsSearch] = useState('');
+  const [dsFields, setDsFields] = useState('');
+  const [dsLimit, setDsLimit] = useState('10');
+  const dsResult = useDocSearch(dsResource, dsSearch, {
+    fields: dsFields.trim() ? dsFields.split(',').map(f => f.trim()) : undefined,
+    limit: Number(dsLimit) || 10,
+  });
 
   // ── JSON parse helper ──
   function parseJson(raw: string): Record<string, unknown> {
@@ -436,6 +447,18 @@ export default function DocHookDevPage() {
         error: fileUpload.error,
         data: fileUpload.result as JsonValue,
         curlCmd: buildCurl({ method: 'POST', path: '/api/method/upload_file', isMultipart: true }),
+      };
+      break;
+    }
+    case 'docSearch': {
+      const dsParams: Record<string, string> = { limit: dsLimit };
+      if (dsFields.trim()) dsParams.fields = JSON.stringify(dsFields.split(',').map(f => f.trim()));
+      if (dsSearch.trim()) dsParams.filters = JSON.stringify([['name', 'like', `%${dsSearch.trim()}%`]]);
+      responseState = {
+        hookName: 'useDocSearch', type: 'query',
+        isLoading: dsResult.isLoading, isValidating: dsResult.isValidating,
+        error: dsResult.error, data: dsResult.data as JsonValue,
+        curlCmd: dsResource && dsSearch ? buildCurl({ method: 'GET', path: `/api/resource/${dsResource}`, params: dsParams }) : undefined,
       };
       break;
     }
@@ -646,6 +669,37 @@ export default function DocHookDevPage() {
               }}>{fileUpload.loading ? `Uploading ${fileUpload.progress}%…` : '📤 Upload'}</button>
               {(fileUpload.isCompleted || fileUpload.error) && <button className={btnSecondary} onClick={fileUpload.reset}>Reset</button>}
             </div>
+          </HookCard>
+
+          {/* useDocSearch */}
+          <HookCard id="docSearch" active={active === 'docSearch'} title="useDocSearch" subtitle="GET /api/resource/{Doctype}?filters=[[name,like,%…%]] (debounced)" onSelect={(id) => setActive(id as HookId)}>
+            <p className="text-xs text-zinc-400">Kết quả cập nhật realtime khi gõ — debounce 300ms.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div><label className={labelCls}>Doctype *</label><input value={dsResource} onChange={(e) => { setDsResource(e.target.value); setActive('docSearch'); }} placeholder="Task" className={inputCls} /></div>
+              <div><label className={labelCls}>Limit</label><input type="number" value={dsLimit} onChange={(e) => setDsLimit(e.target.value)} className={inputCls} /></div>
+            </div>
+            <div><label className={labelCls}>Search keyword *</label>
+              <input value={dsSearch} onChange={(e) => { setDsSearch(e.target.value); setActive('docSearch'); }}
+                placeholder="Type to search…" className={inputCls} />
+            </div>
+            <div><label className={labelCls}>Fields <span className="font-normal text-zinc-400">(comma-separated)</span></label>
+              <input value={dsFields} onChange={(e) => setDsFields(e.target.value)} placeholder="name, subject" className={inputCls} />
+            </div>
+            {/* Inline results preview */}
+            {dsResult.isLoading && <p className="text-xs text-blue-500">Searching…</p>}
+            {!dsResult.isLoading && dsResult.data && dsResult.data.length > 0 && (
+              <ul className="space-y-1 rounded-lg border border-zinc-100 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-800/50">
+                {(dsResult.data as Record<string, unknown>[]).slice(0, 8).map((item, i) => (
+                  <li key={i} className="truncate text-xs text-zinc-600 dark:text-zinc-300">
+                    {String(item.name ?? item.subject ?? JSON.stringify(item))}
+                  </li>
+                ))}
+                {dsResult.data.length > 8 && <li className="text-xs text-zinc-400">+{dsResult.data.length - 8} more…</li>}
+              </ul>
+            )}
+            {!dsResult.isLoading && dsResult.data?.length === 0 && dsSearch.trim() && (
+              <p className="text-xs text-zinc-400">No results found.</p>
+            )}
           </HookCard>
 
         </div>{/* end LEFT */}
