@@ -1,4 +1,4 @@
-# windify/task-view
+# Next.js + Frappe Boilerplate using API proxy and React hooks to interact with Frappe REST API
 
 A Next.js application integrated with **Frappe Framework** backend, featuring a custom React hooks library for interacting with the Frappe REST API.
 

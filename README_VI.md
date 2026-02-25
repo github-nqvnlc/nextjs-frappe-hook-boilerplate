@@ -1,4 +1,4 @@
-# windify/task-view
+# Next.js + Frappe Boilerplate sử dụng API proxy và React hooks để tương tác với Frappe REST API
 
 Next.js application tích hợp với **Frappe Framework** backend, bao gồm thư viện custom React hooks để tương tác với Frappe REST API.
 
