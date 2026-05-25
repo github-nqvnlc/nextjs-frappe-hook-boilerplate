@@ -47,6 +47,3 @@ cloudflare-env.d.ts
 
 # Wrangler
 .wrangler/
-
-# Scripts
-scripts/*.mjs
