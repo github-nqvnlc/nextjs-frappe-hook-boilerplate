@@ -1,0 +1,17 @@
+name = "nextjs-frappe-hook"
+main = ".open-next/worker.js"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+[[services]]
+binding = "WORKER_SELF_REFERENCE"
+service = "nextjs-frappe-hook"
+
+# Set production URL via command line or wrangler secret
+# Do NOT put sensitive values here - use wrangler secret put NEXT_PUBLIC_APP_URL
+[vars]
+NEXT_PUBLIC_APP_URL = "https://your-domain.com"

@@ -1,34 +1,73 @@
-# Next.js + Frappe Boilerplate sử dụng API proxy và React hooks để tương tác với Frappe REST API
+# Next.js + Frappe Boilerplate
 
 Next.js application tích hợp với **Frappe Framework** backend, bao gồm thư viện custom React hooks để tương tác với Frappe REST API.
 
 ---
 
-## Yêu cầu
+## Mục lục
 
-- Node.js 18+
-- Frappe backend đang chạy (ví dụ: `https://your-frappe-site.com`)
+- [Quick Start](#quick-start)
+- [Cài đặt](#cài-đặt)
+- [Cấu hình](#cấu-hình)
+- [Hooks](#hooks)
+- [Dev Tools](#dev-tools)
+- [Cấu trúc thư mục](#cấu-trúc-thư-mục)
+- [Authentication](#authentication)
+- [Deployment](#deployment)
+- [API Proxy](#api-proxy)
 
 ---
 
-## Cài đặt & chạy
+## Quick Start
+
+### Local Development (Node.js)
 
 ```bash
 npm install
 npm run dev
 ```
 
-Mở [http://localhost:3000](http://localhost:3000) trên trình duyệt.
+### Preview (Cloudflare Workers Runtime)
+
+```bash
+npm run preview
+```
+
+### Deploy to Cloudflare
+
+```bash
+npm run deploy
+npx wrangler secret put FRAPPE_URL
+```
 
 ---
 
-## Cấu hình
+## Cài đặt
 
-Tạo file `.env.local` ở thư mục gốc:
+### Yêu cầu
 
-```env
-# URL Frappe backend — dùng bởi Next.js server-side để proxy
-FRAPPE_URL=https://your-frappe-site.com
+- Node.js >= 20.x
+- npm >= 10.x
+- Frappe backend đang chạy
+
+### Environment Variables
+
+#### Development (.env.local)
+
+```bash
+FRAPPE_URL=https://smr.windify.net
+NEXT_PUBLIC_FRAPPE_URL=https://smr.windify.net
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXTJS_ENV=development
+```
+
+#### Production (.env.production)
+
+```bash
+FRAPPE_URL=https://smr.windify.net
+NEXT_PUBLIC_FRAPPE_URL=https://smr.windify.net
+NEXT_PUBLIC_APP_URL=https://your-actual-domain.com
+NEXTJS_ENV=production
 ```
 
 > **Lưu ý:** Browser không gọi thẳng đến `FRAPPE_URL`. Mọi request `/api/*` của browser sẽ được **Next.js proxy** (server-to-server) forward sang Frappe, giúp tránh lỗi CORS và cho phép cookie `sid` hoạt động đúng trên `localhost`.
@@ -40,7 +79,7 @@ FRAPPE_URL=https://your-frappe-site.com
 ```
 Browser → localhost:3000/api/resource/...
               ↓ (Next.js rewrite — server-side)
-    cds.windify.net/api/resource/...  (Frappe)
+    your-frappe-site.com/api/resource/...  (Frappe)
 ```
 
 Cấu hình trong `next.config.ts`:
@@ -285,6 +324,7 @@ src/
 ├── lib/
 │   ├── ApiProvider.tsx     # QueryClientProvider + apiClient init
 │   └── apiClient.ts        # Axios instance + CSRF interceptor
+├── middleware.ts           # Edge Middleware (auth guard)
 └── types/
     └── hooks.ts            # Shared TypeScript types
 ```
@@ -296,3 +336,119 @@ src/
 Sử dụng Frappe **session cookie** (`sid`). Sau khi `login()` thành công, cookie được set tự động bởi trình duyệt. Mọi request sau đó tự động đính kèm cookie (qua `withCredentials: true`).
 
 Mutations (POST / PUT / DELETE) tự động đính kèm **CSRF token** từ cookie `csrf_token` qua header `X-Frappe-CSRF-Token`.
+
+---
+
+## Deployment
+
+### Cloudflare Workers (OpenNext)
+
+#### Yêu cầu
+
+- Next.js >= 16.2.6 (khuyến nghị: 16.2.6)
+- wrangler >= 4.86.0
+
+#### Setup
+
+```bash
+# Install dependencies
+npm install @opennextjs/cloudflare wrangler
+
+# Preview locally (Workers runtime)
+npm run preview
+
+# Deploy (đọc .env.production)
+npm run deploy
+
+# Set secrets
+npx wrangler secret put FRAPPE_URL
+```
+
+#### Deploy Script
+
+Script `scripts/deploy.mjs` tự động:
+1. Đọc `NEXT_PUBLIC_APP_URL` từ `.env.production`
+2. Build Next.js
+3. Deploy với `--var` để override
+
+#### Commands
+
+| Task | Command |
+|------|---------|
+| Preview local | `npm run preview` |
+| Deploy | `npm run deploy` |
+| Deploy (wrangler) | `npm run deploy:wrangler` |
+| Upload version | `npm run upload` |
+| Generate types | `npm run cf-typegen` |
+| Set secret | `npx wrangler secret put FRAPPE_URL` |
+| Check auth | `npx wrangler whoami` |
+| View logs | `npx wrangler tail` |
+
+---
+
+## API Proxy
+
+**Quan trọng**: OpenNext Cloudflare **không hỗ trợ** Next.js rewrites khi deploy. Rewrite trong `next.config.ts` chỉ hoạt động local.
+
+### Options cho Production
+
+#### Option 1: Cloudflare Routes (Khuyến nghị)
+
+Deploy separate Worker cho API:
+
+```javascript
+// frappe-api-worker/index.ts
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    return fetch(`${env.FRAPPE_URL}${url.pathname}${url.search}`, request);
+  }
+};
+```
+
+Configure routes trong Cloudflare Dashboard:
+```
+api.your-domain.com/*  → frappe-api worker
+your-domain.com/*      → nextjs-frappe-hook worker
+```
+
+#### Option 2: Subdirectory
+
+Dùng `/frappe-api/*` và configure riêng.
+
+#### Option 3: Cloudflare Pages
+
+Dùng Cloudflare Pages với `_routes.json`.
+
+---
+
+## Troubleshooting
+
+### "Node.js middleware is not currently supported"
+
+**Nguyên nhân**: App sử dụng `proxy.ts` (Node.js middleware)
+
+**Giải pháp**: Đã chuyển sang `middleware.ts` (Edge Middleware)
+
+### Build fails với peer dependency errors
+
+**Giải pháp**:
+- Next.js 15: `npm install next@15.5.18`
+- Next.js 16: `npm install next@16.2.6`
+
+### Cookie/Session not working ở Production
+
+**Nguyên nhân**: CORS hoặc cookie domain issue khi proxy
+
+**Giải pháp**:
+- Sử dụng separate API Worker thay vì Next.js rewrites
+- Set cookie domain phù hợp trong Frappe config
+
+---
+
+## Tài liệu tham khảo
+
+- [OpenNext Cloudflare Docs](https://opennext.js.org/cloudflare)
+- [Cloudflare Workers Docs](https://developers.cloudflare.com/workers/)
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)
+- [CLOUDFLARE.md](./CLOUDFLARE.md) - Chi tiết deployment

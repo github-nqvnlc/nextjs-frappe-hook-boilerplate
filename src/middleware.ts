@@ -3,12 +3,10 @@ import type { NextRequest } from 'next/server';
 
 const PUBLIC_PATHS = ['/login', '/register'];
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
-  // Kiểm tra cookie "sid" — cookie này giờ được set trên localhost
-  // nhờ Next.js rewrites proxy (request qua /* là same-origin)
   const sid = request.cookies.get('sid')?.value;
   const isLoggedIn = !!sid && sid !== 'Guest';
 

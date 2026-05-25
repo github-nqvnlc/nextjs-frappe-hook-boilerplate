@@ -30,9 +30,6 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
 # vercel
 .vercel
 
@@ -42,3 +39,14 @@ next-env.d.ts
 
 # env
 .env.local
+.env.development
+.env.production
+# OpenNext Cloudflare
+.open-next/
+cloudflare-env.d.ts
+
+# Wrangler
+.wrangler/
+
+# Scripts
+scripts/*.mjs

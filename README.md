@@ -1,32 +1,73 @@
-# Next.js + Frappe Boilerplate using API proxy and React hooks to interact with Frappe REST API
+# Next.js + Frappe Boilerplate
 
 A Next.js application integrated with **Frappe Framework** backend, featuring a custom React hooks library for interacting with the Frappe REST API.
 
 ---
 
-## Requirements
+## Table of Contents
 
-- Node.js 18+
-- A running Frappe backend (e.g. `https://your-frappe-site.com`)
+- [Quick Start](#quick-start)
+- [Setup](#setup)
+- [Configuration](#configuration)
+- [Hooks](#hooks)
+- [Dev Tools](#dev-tools)
+- [Project Structure](#project-structure)
+- [Authentication](#authentication)
+- [Deployment](#deployment)
+- [API Proxy](#api-proxy)
 
 ---
 
-## Setup
+## Quick Start
+
+### Local Development (Node.js)
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+### Preview (Cloudflare Workers Runtime)
+
+```bash
+npm run preview
+```
+
+### Deploy to Cloudflare
+
+```bash
+npm run deploy
+npx wrangler secret put FRAPPE_URL
+```
+
+---
+
+## Setup
+
+### Requirements
+
+- Node.js >= 20.x
+- npm >= 10.x
+- A running Frappe backend
 
 ### Environment Variables
 
-Create a `.env.local` file at the project root:
+#### Development (.env.local)
 
-```env
-# Frappe backend URL — used server-side by Next.js for proxying
-FRAPPE_URL=https://your-frappe-site.com
+```bash
+FRAPPE_URL=https://smr.windify.net
+NEXT_PUBLIC_FRAPPE_URL=https://smr.windify.net
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXTJS_ENV=development
+```
+
+#### Production (.env.production)
+
+```bash
+FRAPPE_URL=https://smr.windify.net
+NEXT_PUBLIC_FRAPPE_URL=https://smr.windify.net
+NEXT_PUBLIC_APP_URL=https://your-actual-domain.com
+NEXTJS_ENV=production
 ```
 
 > **Note:** The browser never calls `FRAPPE_URL` directly. All `/api/*` requests are forwarded by the **Next.js server** (server-to-server) to Frappe, eliminating CORS issues and ensuring the `sid` session cookie works correctly on `localhost`.
@@ -35,10 +76,10 @@ FRAPPE_URL=https://your-frappe-site.com
 
 ## API Proxy Architecture
 
-```text
+```
 Browser → localhost:3000/api/resource/...
-              ↓  Next.js rewrite (server-side)
-    your-frappe-site.com/api/resource/...
+              ↓ (Next.js rewrite — server-side)
+    your-frappe-site.com/api/resource/...  (Frappe)
 ```
 
 Configured in `next.config.ts`:
@@ -241,14 +282,131 @@ src/
 ├── lib/
 │   ├── ApiProvider.tsx     # QueryClientProvider + apiClient init
 │   └── apiClient.ts        # Axios instance + CSRF interceptor
+├── middleware.ts           # Edge Middleware (auth guard)
 └── types/
     └── hooks.ts            # Shared TypeScript types
 ```
 
 ---
 
-## Authentication Model
+## Authentication
 
 The library uses Frappe's **session cookie** (`sid`). After a successful `login()`, the cookie is set automatically by the browser. All subsequent requests include it via `withCredentials: true`.
 
 Mutations (POST / PUT / DELETE) automatically attach the **CSRF token** from the `csrf_token` cookie via the `X-Frappe-CSRF-Token` header.
+
+---
+
+## Deployment
+
+### Cloudflare Workers (OpenNext)
+
+#### Requirements
+
+- Next.js >= 16.2.6 (recommended: 16.2.6)
+- wrangler >= 4.86.0
+
+#### Setup
+
+```bash
+# Install dependencies
+npm install @opennextjs/cloudflare wrangler
+
+# Preview locally (Workers runtime)
+npm run preview
+
+# Deploy (reads .env.production)
+npm run deploy
+
+# Set secrets
+npx wrangler secret put FRAPPE_URL
+```
+
+#### Deploy Script
+
+The `scripts/deploy.mjs` script automatically:
+1. Reads `NEXT_PUBLIC_APP_URL` from `.env.production`
+2. Builds Next.js
+3. Deploys with `--var` to override
+
+#### Commands
+
+| Task | Command |
+|------|---------|
+| Preview local | `npm run preview` |
+| Deploy | `npm run deploy` |
+| Deploy (wrangler) | `npm run deploy:wrangler` |
+| Upload version | `npm run upload` |
+| Generate types | `npm run cf-typegen` |
+| Set secret | `npx wrangler secret put FRAPPE_URL` |
+| Check auth | `npx wrangler whoami` |
+| View logs | `npx wrangler tail` |
+
+---
+
+## API Proxy
+
+**Important**: OpenNext Cloudflare **does not support** Next.js rewrites when deployed. The rewrite in `next.config.ts` only works locally.
+
+### Options for Production
+
+#### Option 1: Cloudflare Routes (Recommended)
+
+Deploy a separate Worker for API:
+
+```javascript
+// frappe-api-worker/index.ts
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    return fetch(`${env.FRAPPE_URL}${url.pathname}${url.search}`, request);
+  }
+};
+```
+
+Configure routes in Cloudflare Dashboard:
+```
+api.your-domain.com/*  → frappe-api worker
+your-domain.com/*      → nextjs-frappe-hook worker
+```
+
+#### Option 2: Subdirectory
+
+Use `/frappe-api/*` and configure separately.
+
+#### Option 3: Cloudflare Pages
+
+Use Cloudflare Pages with `_routes.json` for more flexible routing.
+
+---
+
+## Troubleshooting
+
+### "Node.js middleware is not currently supported"
+
+**Cause**: App uses `proxy.ts` (Node.js middleware)
+
+**Solution**: Already converted to `middleware.ts` (Edge Middleware)
+
+### Build fails with peer dependency errors
+
+**Solution**:
+- Next.js 15: `npm install next@15.5.18`
+- Next.js 16: `npm install next@16.2.6`
+
+### Cookie/Session not working in Production
+
+**Cause**: CORS or cookie domain issue with proxy
+
+**Solution**:
+- Use separate API Worker instead of Next.js rewrites
+- Set appropriate cookie domain in Frappe config
+
+---
+
+## References
+
+- [OpenNext Cloudflare Docs](https://opennext.js.org/cloudflare)
+- [Cloudflare Workers Docs](https://developers.cloudflare.com/workers/)
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)
+- [CLOUDFLARE.md](./CLOUDFLARE.md) - Detailed deployment guide
