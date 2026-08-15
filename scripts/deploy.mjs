@@ -35,8 +35,8 @@ Object.entries(envVars).forEach(([key, value]) => {
 });
 
 // Build
-console.log("\n📦 Building Next.js app...");
-execSync("npm run build", { stdio: "inherit" });
+console.log("\n📦 Building Next.js app with OpenNext...");
+execSync("npx opennextjs-cloudflare build", { stdio: "inherit" });
 
 // Build wrangler deploy command with all vars
 const deployVars = Object.entries(envVars)
